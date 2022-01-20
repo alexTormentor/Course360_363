@@ -1,0 +1,74 @@
+import requests
+from bs4 import BeautifulSoup
+import database
+from pymongo import MongoClient
+
+
+def parse_news():
+    page_link = "https://www.volzsky.ru/index.php?wx=16&st="
+    list_link = []
+    news_count = 1
+    # Подключение к бд MongoDB
+    client = MongoClient('mongodb+srv://AlexB:456@cluster0.g7ol3.mongodb.net/ArticlesDB?retryWrites=true&w=majority')
+    db = client['News']
+    series_collection = db['news']
+
+    # Цикл получения новостей
+    for k in range(1, 800):
+        current_page = page_link + str(k)
+        l = requests.get(current_page)
+        page_parse = BeautifulSoup(l.text, 'html.parser')
+        # Получение ссылок на конкретные новости
+        for news_link in page_parse.find_all("div", {"class": "btc_block-1_1 btc_h"}):
+            temp = news_link.find("a")
+            current_link = "https://www.volzsky.ru/" + temp["href"]
+
+            content_string = ""
+            list_link.append(current_link)
+            # Заполнение массива ссылками на новости текущей страницы сайта
+            for i in range(len(list_link)):
+                link = list_link[i]
+            r = requests.get(link)
+            soup = BeautifulSoup(r.text, 'html.parser')
+
+            # Получение заголовка новости
+            titles = soup.find_all('h1')
+            for title in titles:
+                cmts = soup.find_all("div", {"class": "btc_block-5_2"})
+
+            # Получение текста новости
+            para = soup.find("div", id="bt_center").find_all("p")
+
+            for content in para:
+                content_string = content_string + content.text
+
+            # Получение даты и времени публикации
+            date = soup.find('div', {'align': 'right'})
+            if date == None:
+                continue
+            #if len(date.text) > 40:
+                #date = soup.find('div', {'align': 'right'}).find("br").next_sibling
+
+            # Добавление данных о новости в словарь для передачи в БД
+            new_data = {
+                "_id": news_count,
+                "title": title.text,
+                "date": date.text,
+                "link": list_link[i],
+                "text": content_string,
+                "cmts": len(cmts),
+                "people": '',
+                "places": ''
+            }
+
+            #Добавление данных в БД
+            database.insert_document(series_collection, new_data)
+            news_count = news_count + 1
+
+
+def main():
+    parse_news()
+
+
+if __name__ == '__main__':
+    main()
